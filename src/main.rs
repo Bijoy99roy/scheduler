@@ -7,7 +7,7 @@ use std::thread;
 use std::time::Duration;
 
 fn main() {
-    telemetry::init_telemetry();
+    let _guard = telemetry::init_telemetry();
     tracing::info!("Scheduler Component Initialized!");
     telemetry::log_resource_usage();
 
