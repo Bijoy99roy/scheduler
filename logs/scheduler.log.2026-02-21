@@ -1,6 +1,0 @@
-2026-02-21T14:24:40.948947Z  INFO scheduler::telemetry: Event System & Telemetry initialized.
-2026-02-21T14:24:40.948974Z  INFO scheduler: Scheduler Engine Initialized!
-2026-02-21T14:24:41.429391Z  INFO scheduler::telemetry: Resource Monitor - Memory: 9461MB / 15167MB, CPU: 3.77%
-2026-02-21T14:24:41.435474Z  INFO scheduler::job: Job 67b6fcb1-5151-47cb-96a6-f2421fac6c8a started running.
-2026-02-21T14:24:41.435530Z  WARN scheduler::job: Job 67b6fcb1-5151-47cb-96a6-f2421fac6c8a failed. Retrying (1/2).
-2026-02-21T14:24:41.906041Z  INFO scheduler::telemetry: Resource Monitor - Memory: 9427MB / 15167MB, CPU: 3.80%
