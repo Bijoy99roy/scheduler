@@ -14,9 +14,9 @@ fn engine_dispatches_jobs_on_time() {
     {
         let mut q = queue.lock().unwrap();
         // A job exactly at 'now'
-        q.push(Job::new(now, 1, "now job", "fn").unwrap());
+        q.push(Job::new(now, 1, "now job", "fn", 3).unwrap());
         // A job 1 second in the future
-        q.push(Job::new(now + 1, 1, "future job", "fn").unwrap());
+        q.push(Job::new(now + 1, 1, "future job", "fn", 3).unwrap());
     }
 
     engine.start();

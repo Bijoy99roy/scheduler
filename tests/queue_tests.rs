@@ -10,7 +10,7 @@ fn now() -> i64 {
 }
 
 fn job(exec_time: i64, priority: u8, desc: &str) -> Job {
-    Job::new(exec_time, priority, desc, "fn").unwrap()
+    Job::new(exec_time, priority, desc, "fn", 3).unwrap()
 }
 
 #[test]
@@ -88,12 +88,12 @@ fn pop_on_empty_returns_none() {
 
 #[test]
 fn rejects_job_with_past_execution_time() {
-    let result = Job::new(0, 5, "old job", "fn");
+    let result = Job::new(0, 5, "old job", "fn", 3);
     assert!(result.is_err());
 }
 
 #[test]
 fn accepts_job_with_future_execution_time() {
-    let result = Job::new(now() + 100, 5, "future job", "fn");
+    let result = Job::new(now() + 100, 5, "future job", "fn", 3);
     assert!(result.is_ok());
 }

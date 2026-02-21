@@ -23,22 +23,25 @@ impl Worker {
     }
 
     /// The execution engine: looks up the string in the map and calls the function
-    pub fn run_job(&self, job: &Job) {
+    pub fn run_job(&self, job: &mut Job) {
         if let Some(func) = self.registry.get(&job.function) {
+            job.start();
             println!("[Worker] Executing: {}", job.function);
             func(); // Execute the function pointer
+            job.complete();
         } else {
             eprintln!(
                 "[Worker] Error: No function registered for '{}'",
                 job.function
             );
+            job.fail_and_retry();
         }
     }
 
     /// Starts a simple blocking loop to process jobs from the channel
     pub fn start(&self, rx: std::sync::mpsc::Receiver<Job>) {
-        for job in rx {
-            self.run_job(&job);
+        for mut job in rx {
+            self.run_job(&mut job);
         }
     }
 }
