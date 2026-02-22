@@ -1,5 +1,5 @@
 use scheduler::{job::{Job, Status}, queue::QueueManager, worker::Worker};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex, atomic::{AtomicBool, Ordering}};
 
 #[cfg(test)]
 mod tests {
@@ -13,9 +13,8 @@ mod tests {
 
     #[test]
     fn test_worker_registry_execution() {
-        let mut manager = QueueManager::new();
+        let manager = Arc::new(Mutex::new(QueueManager::new()));
         let mut worker = Worker::new();
-
         // 1. Register our test function
         worker.register("test_func", test_task);
 
@@ -28,35 +27,40 @@ mod tests {
             execution_time: 0, 
             status: Status::Pending,
         };
-        manager.push(job);
 
-        // 3. Reset the flag and run the worker once
+        {
+            let mut lock = manager.lock().unwrap();
+            lock.push(job);
+        }
+
         WAS_CALLED.store(false, Ordering::SeqCst);
-        worker.process_once(&mut manager);
+        worker.process_once(Arc::clone(&manager));
 
-        // 4. Assert the function was triggered
         assert!(WAS_CALLED.load(Ordering::SeqCst), "The registered function should have been executed");
-        assert_eq!(manager.len(), 0, "The job should have been popped from the queue");
+        
+        let lock = manager.lock().unwrap();
+        assert_eq!(lock.len(), 0, "The job should have been popped from the queue");
     }
 
     #[test]
     fn test_unknown_function_graceful_failure() {
-        let mut manager = QueueManager::new();
-        let worker = Worker::new(); // No functions registered
+        let manager = Arc::new(Mutex::new(QueueManager::new()));
+        let worker = Worker::new(); 
 
         let job = Job {
             id: uuid::Uuid::new_v4(),
             function: "missing_func".to_string(),
-            description: "A test job for the registry".to_string(), // Added
+            description: "Unknown task".to_string(),
             priority: 2,
             execution_time: 0,
             status: Status::Pending,
         };
-        manager.push(job);
+        
+        manager.lock().unwrap().push(job);
 
         // Should not panic, just log an error
-        worker.process_once(&mut manager);
+        worker.process_once(Arc::clone(&manager));
         
-        assert_eq!(manager.len(), 0, "The job should still be popped even if function is missing");
+        assert_eq!(manager.lock().unwrap().len(), 0, "The job should still be popped");
     }
 }

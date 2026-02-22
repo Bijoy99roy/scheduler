@@ -1,6 +1,7 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::collections::HashMap;
 use std::{thread, time::Duration};
+use std::sync::{Arc, Mutex};
 
 use crate::job::Job;
 use crate::queue::QueueManager;
@@ -36,32 +37,44 @@ impl Worker {
     }
 
     /// Starts a simple polling loop to process jobs from the queue
-    pub fn start(&self, queue: &mut QueueManager) {
+    pub fn start(&self, queue: Arc<Mutex<QueueManager>>) {
         loop {
-                    let now = SystemTime::now()
-                        .duration_since(UNIX_EPOCH)
-                        .unwrap()
-                        .as_secs() as i64;
+            let now = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs() as i64;
 
-                    let ready_jobs = queue.pop_ready(now);
+            // Scope the lock so it is released as soon as we have the jobs
+            let ready_jobs = {
+                let mut lock = queue.lock().expect("Mutex poisoned");
+                lock.pop_ready(now)
+            }; // Lock drops here
 
-                    for job in ready_jobs {
-                        self.run_job(&job);
-                    }
-
-                    // Prevent 100% CPU usage during idle
-                    thread::sleep(Duration::from_millis(100));
+            if ready_jobs.is_empty() {
+                thread::sleep(Duration::from_millis(500));
+                continue;
             }
+
+            for job in ready_jobs {
+                self.run_job(&job);
+            }
+        }
     }
 
     /// Processes all currently ready jobs once and returns (for testing/manual polling)
-    pub fn process_once(&self, queue: &mut QueueManager) {
+    pub fn process_once(&self, queue: Arc<Mutex<QueueManager>>) {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .expect("Time went backwards")
             .as_secs() as i64;
 
-        let ready_jobs = queue.pop_ready(now);
+        // 1. Acquire the lock and extract ready jobs
+        let ready_jobs = {
+            let mut lock = queue.lock().expect("Failed to lock QueueManager: Mutex poisoned");
+            lock.pop_ready(now)
+        }; // 2. Mutex lock is automatically dropped here
+
+        // 3. Execute jobs outside of the lock to allow concurrency
         for job in ready_jobs {
             self.run_job(&job);
         }
