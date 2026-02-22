@@ -1,5 +1,5 @@
 use sysinfo::System;
-use tracing::{info, Level};
+use tracing::info;
 use tracing_subscriber::{filter::LevelFilter, layer::SubscriberExt};
 
 pub fn init_telemetry() -> tracing_appender::non_blocking::WorkerGuard {
