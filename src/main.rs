@@ -15,12 +15,18 @@ fn main() {
     let engine = TimePriorityEngine::new(Arc::clone(&queue), tx);
     engine.start();
 
-    // Start a simple worker simulation thread
+    // Start the real Worker in a separate thread
     thread::spawn(move || {
-        while let Ok(job) = rx.recv() {
-            println!("[Worker] Executing job {} ('{}')", job.id, job.description);
-            thread::sleep(Duration::from_millis(50)); // Simulating work
-        }
+        let mut worker = scheduler::worker::Worker::new();
+        // Register actual functions from worker.rs (or inline closures)
+        worker.register("backup_fn", scheduler::worker::backup_db);
+        worker.register("email_fn", scheduler::worker::send_email);
+        worker.register("hotfix_fn", || {
+            println!(" [Task] Applying urgent hotfix...")
+        });
+
+        println!("[Main] Starting Worker loop...");
+        worker.start(rx);
     });
 
     // Schedule some jobs
