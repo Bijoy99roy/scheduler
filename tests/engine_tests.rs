@@ -5,7 +5,7 @@ use std::time::Duration;
 
 #[test]
 fn engine_dispatches_jobs_on_time() {
-    let queue = Arc::new(Mutex::new(QueueManager::new()));
+    let queue = Arc::new(Mutex::new(QueueManager::with_path("")));
     let (tx, rx) = mpsc::channel();
     let engine = TimePriorityEngine::new(Arc::clone(&queue), tx);
 

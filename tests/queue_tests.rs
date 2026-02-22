@@ -15,7 +15,7 @@ fn job(exec_time: i64, priority: u8, desc: &str) -> Job {
 
 #[test]
 fn push_increases_len() {
-    let mut q = QueueManager::new();
+    let mut q = QueueManager::with_path("");
     q.push(job(now() + 10, 1, "a"));
     q.push(job(now() + 20, 1, "b"));
     assert_eq!(q.len(), 2);
@@ -23,7 +23,7 @@ fn push_increases_len() {
 
 #[test]
 fn pop_returns_earliest() {
-    let mut q = QueueManager::new();
+    let mut q = QueueManager::with_path("");
     q.push(job(now() + 30, 1, "last"));
     q.push(job(now() + 10, 1, "first"));
     q.push(job(now() + 20, 1, "middle"));
@@ -34,7 +34,7 @@ fn pop_returns_earliest() {
 
 #[test]
 fn priority_breaks_time_tie() {
-    let mut q = QueueManager::new();
+    let mut q = QueueManager::with_path("");
     let t = now() + 10;
     q.push(job(t, 1, "low"));
     q.push(job(t, 9, "high"));
@@ -43,7 +43,7 @@ fn priority_breaks_time_tie() {
 
 #[test]
 fn peek_does_not_remove() {
-    let mut q = QueueManager::new();
+    let mut q = QueueManager::with_path("");
     q.push(job(now() + 10, 1, "only"));
     assert_eq!(q.peek().unwrap().description, "only");
     assert_eq!(q.len(), 1);
@@ -51,7 +51,7 @@ fn peek_does_not_remove() {
 
 #[test]
 fn remove_by_uuid() {
-    let mut q = QueueManager::new();
+    let mut q = QueueManager::with_path("");
     let j = job(now() + 10, 1, "target");
     let id = j.id;
     q.push(j);
@@ -62,7 +62,7 @@ fn remove_by_uuid() {
 
 #[test]
 fn remove_missing_uuid_returns_none() {
-    let mut q = QueueManager::new();
+    let mut q = QueueManager::with_path("");
     q.push(job(now() + 10, 1, "job"));
     assert!(q.remove(Uuid::new_v4()).is_none());
     assert_eq!(q.len(), 1);
@@ -70,7 +70,7 @@ fn remove_missing_uuid_returns_none() {
 
 #[test]
 fn pop_ready_only_returns_due_jobs() {
-    let mut q = QueueManager::new();
+    let mut q = QueueManager::with_path("");
     let base = now();
     q.push(job(base + 10, 1, "first ready"));
     q.push(job(base + 20, 1, "second ready"));
@@ -82,7 +82,7 @@ fn pop_ready_only_returns_due_jobs() {
 
 #[test]
 fn pop_on_empty_returns_none() {
-    let mut q = QueueManager::new();
+    let mut q = QueueManager::with_path("");
     assert!(q.pop().is_none());
 }
 
