@@ -13,7 +13,7 @@ mod tests {
     // We use a static atomic to track if the function was called
     static WAS_CALLED: AtomicBool = AtomicBool::new(false);
 
-    fn test_task() {
+    fn test_task(_log_tx: std::sync::mpsc::Sender<String>) {
         WAS_CALLED.store(true, Ordering::SeqCst);
     }
 
@@ -35,8 +35,9 @@ mod tests {
         };
 
         // 3. Reset the flag and run the job
+        let (log_tx, _log_rx) = mpsc::channel();
         WAS_CALLED.store(false, Ordering::SeqCst);
-        worker.run_job(&job);
+        worker.run_job(&job, log_tx);
 
         // 4. Assert the function was triggered
         assert!(
@@ -59,7 +60,8 @@ mod tests {
         };
 
         // Should not panic, just log an error
-        worker.run_job(&job);
+        let (log_tx, _log_rx) = mpsc::channel();
+        worker.run_job(&job, log_tx);
     }
 
     #[test]
@@ -70,9 +72,11 @@ mod tests {
         let (tx, rx) = mpsc::channel();
         WAS_CALLED.store(false, Ordering::SeqCst);
 
+        let (log_tx, _log_rx) = mpsc::channel();
+
         // Start worker in a thread
         thread::spawn(move || {
-            worker.start(rx);
+            worker.start(rx, log_tx);
         });
 
         let job = Job {

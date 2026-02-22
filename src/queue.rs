@@ -113,4 +113,14 @@ impl QueueManager {
     pub fn is_empty(&self) -> bool {
         self.heap.is_empty()
     }
+
+    /// Returns a sorted snapshot of all jobs for display.
+    pub fn snapshot(&mut self) -> Vec<Job> {
+        let mut v: Vec<Job> = self.heap.drain().collect();
+        v.sort();
+        for j in &v {
+            self.heap.push(j.clone());
+        }
+        v
+    }
 }

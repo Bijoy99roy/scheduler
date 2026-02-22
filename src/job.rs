@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
+
 use std::time::{SystemTime, UNIX_EPOCH};
+
 use uuid::Uuid;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -21,12 +23,14 @@ pub struct Job {
 }
 
 impl Job {
+
     fn now() -> i64 {
         SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_secs() as i64
     }
+
     pub fn new(
         execution_time: i64,
         priority: u8,
@@ -38,6 +42,7 @@ impl Job {
         }
 
         Ok(Self {
+
             id: Uuid::new_v4(),
             execution_time,
             priority,

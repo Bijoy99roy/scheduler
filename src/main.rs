@@ -1,52 +1,54 @@
 use scheduler::engine::TimePriorityEngine;
 use scheduler::job::Job;
 use scheduler::queue::QueueManager;
+use scheduler::tui;
 use std::sync::{Arc, Mutex, mpsc};
 use std::thread;
-use std::time::Duration;
 
-fn main() {
+fn main() -> std::io::Result<()> {
     println!("Initializing Scheduler Component...");
-
-    let queue = Arc::new(Mutex::new(QueueManager::new()));
     // Channel from the Time & Priority Engine to the Worker Executor
-    let (tx, rx) = mpsc::channel();
+    let queue = Arc::new(Mutex::new(QueueManager::new()));
+    let (worker_tx, worker_rx) = mpsc::channel();
+    let (log_tx, log_rx) = mpsc::channel();
 
-    let engine = TimePriorityEngine::new(Arc::clone(&queue), tx);
+    let engine =
+        TimePriorityEngine::new_with_log(Arc::clone(&queue), worker_tx.clone(), log_tx.clone());
     engine.start();
 
-    // Start a simple worker simulation thread
+    // Start the real Worker in a separate thread
     thread::spawn(move || {
-        while let Ok(job) = rx.recv() {
-            println!("[Worker] Executing job {} ('{}')", job.id, job.description);
-            thread::sleep(Duration::from_millis(50)); // Simulating work
-        }
+        let mut worker = scheduler::worker::Worker::new();
+        // Register actual functions from worker.rs (or inline closures)
+        worker.register("backup_fn", scheduler::worker::backup_db);
+        worker.register("email_fn", scheduler::worker::send_email);
+        worker.register("hotfix_fn", |log_tx: std::sync::mpsc::Sender<String>| {
+            let _ = log_tx.send(" [Task] Applying urgent hotfix...".to_string());
+        });
+
+        worker.start(worker_rx, log_tx);
     });
 
-    // Schedule some jobs
+    // Previous code: schedule demo jobs (unchanged logic)
     let now = chrono::Utc::now().timestamp();
-
     if let Ok(mut q) = queue.lock() {
-        // Job due in 1 second, priority 5
         if let Ok(j1) = Job::new(now + 1, 5, "Backup Database", "backup_fn") {
             q.push(j1);
         }
-        // Job due in 3 seconds, priority 1
         if let Ok(j2) = Job::new(now + 3, 1, "Send Emails", "email_fn") {
             q.push(j2);
         }
-        // Job due in 1 second, priority 1 (Higher priority than j1)
         if let Ok(j3) = Job::new(now + 1, 1, "Urgent Hotfix", "hotfix_fn") {
             q.push(j3);
         }
     }
 
-    println!("Jobs scheduled into Queue. Waiting for Engine to process...");
-
-    // Wait enough time for all jobs to be processed
-    thread::sleep(Duration::from_secs(4));
-    println!("Scheduler simulation complete. Shutting down.");
-
-    // Stop the engine gracefully
+    let result = tui::run_tui(
+        queue,
+        log_rx,
+        worker_tx,
+        vec!["backup_fn".into(), "email_fn".into(), "hotfix_fn".into()],
+    );
     engine.stop();
+    result
 }
