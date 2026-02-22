@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::time::{SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -20,20 +21,30 @@ pub struct Job {
 }
 
 impl Job {
+    fn now() -> i64 {
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64
+    }
     pub fn new(
         execution_time: i64,
         priority: u8,
         description: impl Into<String>,
         function: impl Into<String>,
-    ) -> Self {
-        Self {
+    ) -> Result<Job, String> {
+        if execution_time < Self::now() {
+            return Err(format!("execution_time {} is in the past", execution_time));
+        }
+
+        Ok(Self {
             id: Uuid::new_v4(),
             execution_time,
             priority,
             description: description.into(),
             function: function.into(),
             status: Status::Pending,
-        }
+        })
     }
 }
 
