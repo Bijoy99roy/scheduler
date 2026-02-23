@@ -10,6 +10,7 @@ use std::time::Duration;
 pub struct TimePriorityEngine {
     queue: Arc<Mutex<QueueManager>>,
     worker_tx: Sender<Job>,
+    log_tx: Option<Sender<String>>,
     is_running: Arc<AtomicBool>,
     handle: Mutex<Option<JoinHandle<()>>>,
 }
@@ -19,6 +20,22 @@ impl TimePriorityEngine {
         Self {
             queue,
             worker_tx,
+            log_tx: None,
+            is_running: Arc::new(AtomicBool::new(false)),
+            handle: Mutex::new(None),
+        }
+    }
+
+    /// For TUI: engine sends log lines to this channel instead of println!.
+    pub fn new_with_log(
+        queue: Arc<Mutex<QueueManager>>,
+        worker_tx: Sender<Job>,
+        log_tx: Sender<String>,
+    ) -> Self {
+        Self {
+            queue,
+            worker_tx,
+            log_tx: Some(log_tx),
             is_running: Arc::new(AtomicBool::new(false)),
             handle: Mutex::new(None),
         }
@@ -36,10 +53,15 @@ impl TimePriorityEngine {
         self.is_running.store(true, Ordering::SeqCst);
         let queue_clone = Arc::clone(&self.queue);
         let tx_clone = self.worker_tx.clone();
+        let log_tx = self.log_tx.clone();
         let running_flag = Arc::clone(&self.is_running);
 
         let thread_handle = thread::spawn(move || {
-            println!("[Engine] Started polling thread.");
+            if let Some(ref tx) = log_tx {
+                let _ = tx.send("[Engine] Started.".to_string());
+            } else {
+                println!("[Engine] Started polling thread.");
+            }
             while running_flag.load(Ordering::Relaxed) {
                 let now = Utc::now().timestamp();
 
@@ -52,19 +74,34 @@ impl TimePriorityEngine {
                 // Push ready jobs to the worker channel
                 for mut job in ready_jobs {
                     job.status = Status::Running;
-                    println!(
-                        "[Engine] Job {} ('{}') is ready (priority: {}). Dispatching to worker...",
-                        job.id, job.description, job.priority
-                    );
+                    if let Some(ref tx) = log_tx {
+                        let _ = tx.send(format!(
+                            "[Engine] Dispatched '{}' (priority {})",
+                            job.description, job.priority
+                        ));
+                    } else {
+                        println!(
+                            "[Engine] Job {} ('{}') is ready (priority: {}). Dispatching to worker...",
+                            job.id, job.description, job.priority
+                        );
+                    }
                     if let Err(e) = tx_clone.send(job) {
-                        eprintln!("[Engine] Failed to dispatch job: {}", e);
+                        if let Some(ref tx) = log_tx {
+                            let _ = tx.send(format!("[Engine] Dispatch error: {}", e));
+                        } else {
+                            eprintln!("[Engine] Failed to dispatch job: {}", e);
+                        }
                     }
                 }
 
                 // Poll every 500ms
                 thread::sleep(Duration::from_millis(500));
             }
-            println!("[Engine] Polling thread stopped gracefully.");
+            if let Some(ref tx) = log_tx {
+                let _ = tx.send("[Engine] Stopped.".to_string());
+            } else {
+                println!("[Engine] Polling thread stopped gracefully.");
+            }
         });
 
         *handle_lock = Some(thread_handle);
