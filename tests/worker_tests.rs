@@ -39,6 +39,7 @@ mod tests {
             status: Status::Pending,
             max_retries: 3,
             retry_count: 0,
+            metadata: None,
         };
 
         // 3. Reset the flag and run the job
@@ -66,6 +67,7 @@ mod tests {
             status: Status::Pending,
             max_retries: 3,
             retry_count: 0,
+            metadata: None,
         };
 
         // Should not panic, just log an error
@@ -97,6 +99,7 @@ mod tests {
             status: Status::Pending,
             max_retries: 3,
             retry_count: 0,
+            metadata: None,
         };
 
         tx.send(job).unwrap();

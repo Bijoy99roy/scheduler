@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 
+use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tracing::{info, warn};
 use uuid::Uuid;
@@ -22,6 +23,8 @@ pub struct Job {
     pub status: Status,
     pub max_retries: u32,
     pub retry_count: u32,
+    #[serde(default)]
+    pub metadata: Option<HashMap<String, String>>,
 }
 
 impl Job {
@@ -44,7 +47,6 @@ impl Job {
         }
 
         Ok(Self {
-
             id: Uuid::new_v4(),
             execution_time,
             priority,
@@ -53,6 +55,7 @@ impl Job {
             status: Status::Pending,
             max_retries,
             retry_count: 0,
+            metadata: None,
         })
     }
 

@@ -11,6 +11,7 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph, Wrap},
 };
+use std::collections::HashMap;
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -37,6 +38,7 @@ pub enum InputMode {
     #[default]
     Normal,
     AddTask,
+    EmailDialog,
 }
 
 #[derive(Clone, Copy)]
@@ -45,6 +47,14 @@ pub enum InputField {
     Priority,
     Description,
     Function,
+}
+
+#[derive(Clone, Copy, Default)]
+pub enum EmailField {
+    #[default]
+    To,
+    Subject,
+    Body,
 }
 
 impl Default for InputField {
@@ -68,6 +78,24 @@ impl Default for AddTaskForm {
             priority: String::new(),
             description: String::new(),
             function: String::new(),
+        }
+    }
+}
+
+pub struct EmailForm {
+    pub to: String,
+    pub subject: String,
+    pub body: String,
+    pub active_field: EmailField,
+}
+
+impl Default for EmailForm {
+    fn default() -> Self {
+        Self {
+            to: String::new(),
+            subject: String::new(),
+            body: String::new(),
+            active_field: EmailField::To,
         }
     }
 }
@@ -139,7 +167,7 @@ impl AppState {
         }
     }
 
-    fn submit_add_task(&mut self, form: &AddTaskForm) -> bool {
+    fn submit_add_task(&mut self, form: &AddTaskForm, metadata: Option<HashMap<String, String>>) -> bool {
         let time_str = form.time.trim();
         let priority_str = form.priority.trim();
         let desc = form.description.trim().to_string();
@@ -156,8 +184,6 @@ impl AppState {
         let time_str = time_str.trim_start_matches('+');
         let execution_time: i64 = match time_str.parse::<i64>() {
             Ok(val) => {
-                // If the number is smaller than 1 billion, assume it's relative seconds from now.
-                // Otherwise treat it as an explicit Unix timestamp.
                 if val < 1_000_000_000 {
                     chrono::Utc::now().timestamp() + val
                 } else {
@@ -176,7 +202,7 @@ impl AppState {
             Ok(p) => p,
             Err(_) => {
                 self.message = Some((
-                    "Priority must be 0–255.".to_string(),
+                    "Priority must be 0\u{2013}255.".to_string(),
                     std::time::Instant::now(),
                 ));
                 return false;
@@ -184,7 +210,8 @@ impl AppState {
         };
 
         match Job::new(execution_time, priority, desc, func, 3) {
-            Ok(job) => {
+            Ok(mut job) => {
+                job.metadata = metadata;
                 if let Ok(mut q) = self.queue.lock() {
                     q.push(job);
                     self.message = Some(("Job added.".to_string(), std::time::Instant::now()));
@@ -220,10 +247,11 @@ pub fn run_tui(
 
     let mut app = AppState::new(queue, log_rx, worker_tx, available_functions);
     let mut form = AddTaskForm::default();
+    let mut email_form = EmailForm::default();
 
     loop {
         app.drain_log();
-        terminal.draw(|f| ui(f, &mut app, &form))?;
+        terminal.draw(|f| ui(f, &mut app, &form, &email_form))?;
 
         if event::poll(Duration::from_millis(100))? {
             if let Event::Key(key) = event::read()? {
@@ -292,7 +320,12 @@ pub fn run_tui(
                             }
                             InputField::Function => {
                                 form.function = app.input_buffer.clone();
-                                if app.submit_add_task(&form) {
+                                // If email_fn, show email dialog instead of submitting
+                                if form.function == "email_fn" {
+                                    email_form = EmailForm::default();
+                                    app.input_mode = InputMode::EmailDialog;
+                                    app.input_buffer = email_form.to.clone();
+                                } else if app.submit_add_task(&form, None) {
                                     app.input_buffer.clear();
                                 }
                             }
@@ -336,6 +369,83 @@ pub fn run_tui(
                         }
                         _ => {}
                     },
+                    InputMode::EmailDialog => match key.code {
+                        KeyCode::Esc => {
+                            app.input_mode = InputMode::AddTask;
+                            app.input_field = InputField::Function;
+                            app.input_buffer = form.function.clone();
+                            app.message = Some(("Email cancelled.".to_string(), std::time::Instant::now()));
+                        }
+                        KeyCode::Tab | KeyCode::Down => {
+                            // Save current field and move to next
+                            match email_form.active_field {
+                                EmailField::To => {
+                                    email_form.to = app.input_buffer.clone();
+                                    email_form.active_field = EmailField::Subject;
+                                    app.input_buffer = email_form.subject.clone();
+                                }
+                                EmailField::Subject => {
+                                    email_form.subject = app.input_buffer.clone();
+                                    email_form.active_field = EmailField::Body;
+                                    app.input_buffer = email_form.body.clone();
+                                }
+                                EmailField::Body => {
+                                    email_form.body = app.input_buffer.clone();
+                                    email_form.active_field = EmailField::To;
+                                    app.input_buffer = email_form.to.clone();
+                                }
+                            }
+                        }
+                        KeyCode::BackTab | KeyCode::Up => {
+                            match email_form.active_field {
+                                EmailField::To => {
+                                    email_form.to = app.input_buffer.clone();
+                                    email_form.active_field = EmailField::Body;
+                                    app.input_buffer = email_form.body.clone();
+                                }
+                                EmailField::Subject => {
+                                    email_form.subject = app.input_buffer.clone();
+                                    email_form.active_field = EmailField::To;
+                                    app.input_buffer = email_form.to.clone();
+                                }
+                                EmailField::Body => {
+                                    email_form.body = app.input_buffer.clone();
+                                    email_form.active_field = EmailField::Subject;
+                                    app.input_buffer = email_form.subject.clone();
+                                }
+                            }
+                        }
+                        KeyCode::Enter => {
+                            // Save active field
+                            match email_form.active_field {
+                                EmailField::To => email_form.to = app.input_buffer.clone(),
+                                EmailField::Subject => email_form.subject = app.input_buffer.clone(),
+                                EmailField::Body => email_form.body = app.input_buffer.clone(),
+                            }
+                            // Build metadata
+                            let mut meta = HashMap::new();
+                            if !email_form.to.is_empty() {
+                                meta.insert("SMTP_RECIPIENT".to_string(), email_form.to.clone());
+                            }
+                            if !email_form.subject.is_empty() {
+                                meta.insert("EMAIL_SUBJECT".to_string(), email_form.subject.clone());
+                            }
+                            if !email_form.body.is_empty() {
+                                meta.insert("EMAIL_BODY".to_string(), email_form.body.clone());
+                            }
+                            let metadata = if meta.is_empty() { None } else { Some(meta) };
+                            if app.submit_add_task(&form, metadata) {
+                                app.input_buffer.clear();
+                            }
+                        }
+                        KeyCode::Backspace => {
+                            app.input_buffer.pop();
+                        }
+                        KeyCode::Char(c) => {
+                            app.input_buffer.push(c);
+                        }
+                        _ => {}
+                    },
                 }
             }
         }
@@ -353,7 +463,7 @@ pub fn run_tui(
     Ok(())
 }
 
-fn ui(f: &mut Frame, app: &mut AppState, _form: &AddTaskForm) {
+fn ui(f: &mut Frame, app: &mut AppState, _form: &AddTaskForm, email_form: &EmailForm) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Min(3), Constraint::Length(3)])
@@ -365,7 +475,7 @@ fn ui(f: &mut Frame, app: &mut AppState, _form: &AddTaskForm) {
         .split(chunks[0]);
 
     let jobs = app.pending_jobs();
-    let title = " Pending tasks (↑/↓ select, Ctrl+A add, D remove, Q quit) ";
+    let title = " Pending tasks (\u{2191}/\u{2193} select, Ctrl+A add, D remove, Q quit) ";
     let list_items: Vec<ListItem> = jobs
         .iter()
         .map(|j| {
@@ -375,7 +485,7 @@ fn ui(f: &mut Frame, app: &mut AppState, _form: &AddTaskForm) {
                 .unwrap_or_else(Utc::now);
             let time_str = ts.format("%H:%M:%S %Y-%m-%d").to_string();
             ListItem::new(Line::from(vec![
-                Span::raw(format!("{} │ P{} │ ", time_str, j.priority)),
+                Span::raw(format!("{} \u{2502} P{} \u{2502} ", time_str, j.priority)),
                 Span::styled(j.description.as_str(), Style::default().fg(Color::Cyan)),
             ]))
         })
@@ -410,16 +520,17 @@ fn ui(f: &mut Frame, app: &mut AppState, _form: &AddTaskForm) {
     f.render_widget(log, main_chunks[1]);
 
     let help = match app.input_mode {
-        InputMode::Normal => " Ctrl+A: Add task │ D: Delete selected │ Q/Esc/Ctrl+C: Quit ",
+        InputMode::Normal => " Ctrl+A: Add task \u{2502} D: Delete selected \u{2502} Q/Esc/Ctrl+C: Quit ",
         InputMode::AddTask => {
             if matches!(app.input_field, InputField::Function)
                 && !app.available_functions.is_empty()
             {
-                " Enter: Submit │ Esc: Cancel │ ↑/↓: Select Function "
+                " Enter: Submit \u{2502} Esc: Cancel \u{2502} \u{2191}/\u{2193}: Select Function "
             } else {
-                " Enter: Next field │ Esc: Cancel │ Time = Secs from now OR Unix sec "
+                " Enter: Next field \u{2502} Esc: Cancel \u{2502} Time = Secs from now OR Unix sec "
             }
         }
+        InputMode::EmailDialog => " Tab/\u{2191}\u{2193}: Switch field \u{2502} Enter: Send \u{2502} Esc: Back ",
     };
     let help_para = Paragraph::new(help)
         .block(Block::default().borders(Borders::ALL))
@@ -435,7 +546,7 @@ fn ui(f: &mut Frame, app: &mut AppState, _form: &AddTaskForm) {
                 if app.available_functions.is_empty() {
                     " Function name "
                 } else {
-                    " Function name (↑/↓ to select) "
+                    " Function name (\u{2191}/\u{2193} to select) "
                 }
             }
         };
@@ -458,6 +569,76 @@ fn ui(f: &mut Frame, app: &mut AppState, _form: &AddTaskForm) {
             .wrap(Wrap { trim: true });
         f.render_widget(Clear, area);
         f.render_widget(para, area);
+    }
+
+    // Render email dialog popup
+    if matches!(app.input_mode, InputMode::EmailDialog) {
+        let area = centered_rect(70, 40, f.area());
+        f.render_widget(Clear, area);
+
+        let block = Block::default()
+            .title(" \u{2709}\u{fe0f}  Email Details ")
+            .borders(Borders::ALL)
+            .style(Style::default().bg(Color::Black).fg(Color::White));
+        f.render_widget(block, area);
+
+        let inner = Rect {
+            x: area.x + 2,
+            y: area.y + 1,
+            width: area.width.saturating_sub(4),
+            height: area.height.saturating_sub(2),
+        };
+
+        let field_chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Length(1), // To label
+                Constraint::Length(1), // To value
+                Constraint::Length(1), // spacing
+                Constraint::Length(1), // Subject label
+                Constraint::Length(1), // Subject value
+                Constraint::Length(1), // spacing
+                Constraint::Length(1), // Body label
+                Constraint::Length(1), // Body value
+                Constraint::Min(0),    // rest
+            ])
+            .split(inner);
+
+        let active_style = Style::default().fg(Color::Green).add_modifier(Modifier::BOLD);
+        let inactive_style = Style::default().fg(Color::DarkGray);
+
+        let (to_style, subj_style, body_style) = match email_form.active_field {
+            EmailField::To => (active_style, inactive_style, inactive_style),
+            EmailField::Subject => (inactive_style, active_style, inactive_style),
+            EmailField::Body => (inactive_style, inactive_style, active_style),
+        };
+
+        // To
+        let to_val = if matches!(email_form.active_field, EmailField::To) {
+            app.input_buffer.as_str()
+        } else {
+            email_form.to.as_str()
+        };
+        f.render_widget(Paragraph::new("  To (comma-separated):").style(to_style), field_chunks[0]);
+        f.render_widget(Paragraph::new(format!("  > {}", to_val)).style(to_style), field_chunks[1]);
+
+        // Subject
+        let subj_val = if matches!(email_form.active_field, EmailField::Subject) {
+            app.input_buffer.as_str()
+        } else {
+            email_form.subject.as_str()
+        };
+        f.render_widget(Paragraph::new("  Subject:").style(subj_style), field_chunks[3]);
+        f.render_widget(Paragraph::new(format!("  > {}", subj_val)).style(subj_style), field_chunks[4]);
+
+        // Body
+        let body_val = if matches!(email_form.active_field, EmailField::Body) {
+            app.input_buffer.as_str()
+        } else {
+            email_form.body.as_str()
+        };
+        f.render_widget(Paragraph::new("  Body:").style(body_style), field_chunks[6]);
+        f.render_widget(Paragraph::new(format!("  > {}", body_val)).style(body_style), field_chunks[7]);
     }
 }
 
