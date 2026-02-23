@@ -241,7 +241,7 @@ pub fn run_tui(
 
     enable_raw_mode()?;
     let mut stdout = std::io::stdout();
-    crossterm::execute!(stdout, EnterAlternateScreen)?;
+    crossterm::execute!(stdout, EnterAlternateScreen, crossterm::event::EnableBracketedPaste)?;
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
@@ -254,7 +254,24 @@ pub fn run_tui(
         terminal.draw(|f| ui(f, &mut app, &form, &email_form))?;
 
         if event::poll(Duration::from_millis(100))? {
-            if let Event::Key(key) = event::read()? {
+            let ev = event::read()?;
+
+            // Handle pasted text
+            if let Event::Paste(text) = &ev {
+                let is_body = matches!(app.input_mode, InputMode::EmailDialog)
+                    && matches!(email_form.active_field, EmailField::Body);
+                let sanitized = if is_body {
+                    // Preserve newlines in email body
+                    text.replace('\r', "")
+                } else {
+                    // Collapse newlines for other fields
+                    text.replace('\n', " ").replace('\r', "")
+                };
+                app.input_buffer.push_str(&sanitized);
+                continue;
+            }
+
+            if let Event::Key(key) = ev {
                 if key.kind != KeyEventKind::Press {
                     continue;
                 }
@@ -458,7 +475,7 @@ pub fn run_tui(
     }
 
     disable_raw_mode()?;
-    crossterm::execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
+    crossterm::execute!(terminal.backend_mut(), crossterm::event::DisableBracketedPaste, LeaveAlternateScreen)?;
     terminal.show_cursor()?;
     Ok(())
 }
@@ -573,7 +590,7 @@ fn ui(f: &mut Frame, app: &mut AppState, _form: &AddTaskForm, email_form: &Email
 
     // Render email dialog popup
     if matches!(app.input_mode, InputMode::EmailDialog) {
-        let area = centered_rect(70, 40, f.area());
+        let area = centered_rect(70, 60, f.area());
         f.render_widget(Clear, area);
 
         let block = Block::default()
@@ -596,11 +613,10 @@ fn ui(f: &mut Frame, app: &mut AppState, _form: &AddTaskForm, email_form: &Email
                 Constraint::Length(1), // To value
                 Constraint::Length(1), // spacing
                 Constraint::Length(1), // Subject label
-                Constraint::Length(1), // Subject value
+                Constraint::Length(2), // Subject value (2 lines)
                 Constraint::Length(1), // spacing
                 Constraint::Length(1), // Body label
-                Constraint::Length(1), // Body value
-                Constraint::Min(0),    // rest
+                Constraint::Min(4),    // Body value (fills remaining space)
             ])
             .split(inner);
 
@@ -620,7 +636,7 @@ fn ui(f: &mut Frame, app: &mut AppState, _form: &AddTaskForm, email_form: &Email
             email_form.to.as_str()
         };
         f.render_widget(Paragraph::new("  To (comma-separated):").style(to_style), field_chunks[0]);
-        f.render_widget(Paragraph::new(format!("  > {}", to_val)).style(to_style), field_chunks[1]);
+        f.render_widget(Paragraph::new(format!("  > {}", to_val)).style(to_style).wrap(Wrap { trim: false }), field_chunks[1]);
 
         // Subject
         let subj_val = if matches!(email_form.active_field, EmailField::Subject) {
@@ -629,7 +645,7 @@ fn ui(f: &mut Frame, app: &mut AppState, _form: &AddTaskForm, email_form: &Email
             email_form.subject.as_str()
         };
         f.render_widget(Paragraph::new("  Subject:").style(subj_style), field_chunks[3]);
-        f.render_widget(Paragraph::new(format!("  > {}", subj_val)).style(subj_style), field_chunks[4]);
+        f.render_widget(Paragraph::new(format!("  > {}", subj_val)).style(subj_style).wrap(Wrap { trim: false }), field_chunks[4]);
 
         // Body
         let body_val = if matches!(email_form.active_field, EmailField::Body) {
@@ -638,7 +654,7 @@ fn ui(f: &mut Frame, app: &mut AppState, _form: &AddTaskForm, email_form: &Email
             email_form.body.as_str()
         };
         f.render_widget(Paragraph::new("  Body:").style(body_style), field_chunks[6]);
-        f.render_widget(Paragraph::new(format!("  > {}", body_val)).style(body_style), field_chunks[7]);
+        f.render_widget(Paragraph::new(format!("  > {}", body_val)).style(body_style).wrap(Wrap { trim: false }), field_chunks[7]);
     }
 }
 
