@@ -7,6 +7,9 @@ use std::sync::{Arc, Mutex, mpsc};
 use std::thread;
 
 fn main() -> std::io::Result<()> {
+    // Load local environment variables for things like SMTP if available
+    dotenvy::dotenv().ok();
+
     println!("Initializing Scheduler Component...");
     let persistence = PersistenceManager::new("queue.json");
     let loaded_jobs = persistence.load_jobs();

@@ -52,7 +52,48 @@ impl Worker {
 
 pub fn send_email(log_tx: Sender<String>) {
     let _ = log_tx.send("📧 [Task] Sending email...".to_string());
-    // Logic for sending email here
+
+    let smtp_host = std::env::var("SMTP_HOST").unwrap_or_else(|_| "smtp.gmail.com".to_string());
+    let smtp_user = std::env::var("SMTP_USERNAME").unwrap_or_default();
+    let smtp_pass = std::env::var("SMTP_PASSWORD").unwrap_or_default();
+    let smtp_to = std::env::var("SMTP_RECIPIENT").unwrap_or_else(|_| smtp_user.clone());
+
+    if smtp_user.is_empty() || smtp_pass.is_empty() {
+        let _ = log_tx.send("❌ [Task] Error: SMTP_USERNAME or SMTP_PASSWORD missing in .env!".to_string());
+        return;
+    }
+
+    let email = match lettre::Message::builder()
+        .from(format!("Termi-Schedule <{}>", smtp_user).parse().unwrap())
+        .to(format!("User <{}>", smtp_to).parse().unwrap())
+        .subject("Termi-Schedule: Job Executed")
+        .body("Hello!\n\nThe automated email task has been successfully processed by your worker thread.".to_string())
+    {
+        Ok(m) => m,
+        Err(e) => {
+            let _ = log_tx.send(format!("❌ [Task] Failed to build email: {}", e));
+            return;
+        }
+    };
+
+    let creds = lettre::transport::smtp::authentication::Credentials::new(smtp_user, smtp_pass);
+
+    let mailer = match lettre::SmtpTransport::relay(&smtp_host) {
+        Ok(builder) => builder.credentials(creds).build(),
+        Err(e) => {
+            let _ = log_tx.send(format!("❌ [Task] Failed to build SMTP transport: {}", e));
+            return;
+        }
+    };
+
+    match lettre::Transport::send(&mailer, &email) {
+        Ok(_) => {
+            let _ = log_tx.send("✅ [Task] Email sent successfully!".to_string());
+        }
+        Err(e) => {
+            let _ = log_tx.send(format!("❌ [Task] Could not send email: {:?}", e));
+        }
+    }
 }
 
 pub fn backup_db(log_tx: Sender<String>) {
