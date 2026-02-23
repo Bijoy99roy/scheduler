@@ -217,6 +217,7 @@ pub fn run_tui(
     crossterm::execute!(stdout, EnterAlternateScreen)?;
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
+    terminal.clear()?;
 
     let mut app = AppState::new(queue, log_rx, worker_tx, available_functions);
     let mut form = AddTaskForm::default();
