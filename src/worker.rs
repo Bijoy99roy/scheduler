@@ -69,17 +69,21 @@ pub fn send_email(log_tx: Sender<String>) {
         return;
     }
 
+    let subject = std::env::var("EMAIL_SUBJECT")
+        .unwrap_or_else(|_| "Termi-Schedule: Job Executed ✅".to_string());
+
     let timestamp = chrono::Utc::now().to_rfc3339();
-    let body_text = format!(
+    let default_body = format!(
         "Hello!\n\nThe automated email task has been successfully processed by your Termi-Schedule worker thread.\n\nTimestamp: {}",
         timestamp
     );
+    let body_text = std::env::var("EMAIL_BODY").unwrap_or(default_body);
 
     let client = reqwest::blocking::Client::new();
     let body = serde_json::json!({
         "from": from,
         "to": [to],
-        "subject": "Termi-Schedule: Job Executed ✅",
+        "subject": subject,
         "text": body_text,
     });
 
