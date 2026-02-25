@@ -6,3 +6,4 @@ pub mod queue;
 pub mod tui;
 pub mod worker;
 pub mod telemetry;
+pub mod tasks;

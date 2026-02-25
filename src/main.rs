@@ -6,6 +6,7 @@ use scheduler::telemetry;
 use scheduler::tui;
 use std::sync::{Arc, Mutex, mpsc};
 use std::thread;
+use scheduler::tasks::{Task, backup_db::BackupDbTask, send_email::SendEmailTask, hotfix::HotfixTask};
 
 fn main() -> std::io::Result<()> {
     // Initialize Telemetry
@@ -35,11 +36,9 @@ fn main() -> std::io::Result<()> {
     thread::spawn(move || {
         let mut worker = scheduler::worker::Worker::new();
         // Register actual functions from worker.rs (or inline closures)
-        worker.register("backup_fn", scheduler::worker::backup_db);
-        worker.register("email_fn", scheduler::worker::send_email);
-        worker.register("hotfix_fn", |log_tx: std::sync::mpsc::Sender<String>| {
-            let _ = log_tx.send(" [Task] Applying urgent hotfix...".to_string());
-        });
+        worker.register("backup_fn", BackupDbTask::run);
+        worker.register("email_fn", SendEmailTask::run);
+        worker.register("hotfix_fn", HotfixTask::run);
 
         worker.start(worker_rx, log_tx);
     });
