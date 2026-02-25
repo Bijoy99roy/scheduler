@@ -106,7 +106,7 @@ impl AppState {
     }
 
     fn pending_jobs(&mut self) -> Vec<Job> {
-        if let Ok(mut q) = self.queue.lock() {
+        if let Ok(q) = self.queue.lock() {
             q.snapshot()
         } else {
             Vec::new()
