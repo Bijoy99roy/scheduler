@@ -50,15 +50,3 @@ impl Worker {
         }
     }
 }
-
-// --- Task Functions ---
-
-pub fn send_email(log_tx: Sender<String>) {
-    let _ = log_tx.send("📧 [Task] Sending email...".to_string());
-    // Logic for sending email here
-}
-
-pub fn backup_db(log_tx: Sender<String>) {
-    let _ = log_tx.send("🗄️ [Task] Backing up database...".to_string());
-    // Logic for DB backup here
-}
