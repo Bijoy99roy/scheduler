@@ -1,1 +1,35 @@
-[]
+[
+  {
+    "id": "23911e12-d7f0-439c-853e-7239fcbfeb87",
+    "execution_time": 1772128646,
+    "priority": 5,
+    "description": "Backup Database",
+    "function": "backup_fn",
+    "status": "Pending",
+    "max_retries": 3,
+    "retry_count": 0,
+    "metadata": null
+  },
+  {
+    "id": "8afa0df6-70fc-4be0-9726-08d3b382a018",
+    "execution_time": 1772128646,
+    "priority": 1,
+    "description": "Urgent Hotfix",
+    "function": "hotfix_fn",
+    "status": "Pending",
+    "max_retries": 3,
+    "retry_count": 0,
+    "metadata": null
+  },
+  {
+    "id": "9696cb0f-bdee-4593-b26b-e5c060b61ee6",
+    "execution_time": 1772128648,
+    "priority": 1,
+    "description": "Send Emails",
+    "function": "email_fn",
+    "status": "Pending",
+    "max_retries": 1,
+    "retry_count": 0,
+    "metadata": null
+  }
+]

@@ -29,6 +29,13 @@ impl Worker {
     /// The execution engine: looks up the string in the map and calls the function
     pub fn run_job(&self, job: &mut Job, log_tx: Sender<String>) {
         if let Some(func) = self.registry.get(&job.function) {
+            // Inject job metadata as env vars so task functions can read them
+            if let Some(ref meta) = job.metadata {
+                for (key, val) in meta {
+                    // SAFETY: single-threaded worker processes jobs sequentially
+                    unsafe { std::env::set_var(key, val); }
+                }
+            }
             job.start();
             let _ = log_tx.send(format!("[Worker] Executing '{}'", job.description));
             func(log_tx.clone()); // Execute the function

@@ -9,6 +9,9 @@ use std::thread;
 use scheduler::tasks::{Task, backup_db::BackupDbTask, send_email::SendEmailTask, hotfix::HotfixTask};
 
 fn main() -> std::io::Result<()> {
+    // Load .env for RESEND_API_KEY, SMTP_FROM, SMTP_RECIPIENT
+    dotenvy::dotenv().ok();
+
     // Initialize Telemetry
     let _guard = telemetry::init_telemetry();
     tracing::info!("Scheduler Component Initialized!");
