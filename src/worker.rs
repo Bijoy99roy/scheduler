@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::sync::mpsc::Sender;
 
 use crate::job::Job;
+use notify_rust::Notification;
 
 /// Type alias for a function pointer that takes log_tx and returns nothing
 // type JobFn = fn(Sender<String>);
@@ -41,12 +42,31 @@ impl Worker {
             func(log_tx.clone()); // Execute the function
             job.complete();
             let _ = log_tx.send(format!("[Worker] Done '{}'", job.description));
+
+            let _ = Notification::new()
+                .summary("Task Scheduler")
+                .body(&format!("Job '{}' completed successfully.", job.description))
+                .show();
         } else {
             let _ = log_tx.send(format!(
                 "[Worker] Error: No function registered for '{}'",
                 job.function
             ));
-            job.fail_and_retry();
+            let will_retry = job.fail_and_retry();
+
+            let msg = if will_retry {
+                format!(
+                    "Job '{}' failed. Will retry ({}/{})",
+                    job.description, job.retry_count, job.max_retries
+                )
+            } else {
+                format!("Job '{}' failed permanently.", job.description)
+            };
+
+            let _ = Notification::new()
+               .summary("Task Scheduler")
+               .body(&msg)
+               .show();
         }
     }
 
